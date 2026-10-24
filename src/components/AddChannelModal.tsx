@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Plus, Tv, Key, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Plus, Tv, Key, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 
 interface AddChannelModalProps {
   isOpen: boolean;
@@ -21,37 +21,50 @@ export const AddChannelModal: React.FC<AddChannelModalProps> = ({
   channelCount,
   lang,
 }) => {
-  const [name, setName] = useState(`चैनल ${channelCount + 1} - लाइव`);
+  const [name, setName] = useState('');
   const [streamKey, setStreamKey] = useState('');
   const [resolution, setResolution] = useState<'1080p' | '720p' | 'original'>('720p');
   const [bitrate, setBitrate] = useState('2500k');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(`चैनल ${channelCount + 1} - लाइव`);
+      setStreamKey('');
+      setErrorMsg(null);
+      setLoading(false);
+    }
+  }, [isOpen, channelCount]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     setLoading(true);
     try {
       await onAddChannel({
-        name: name.trim() || `YouTube Channel ${channelCount + 1}`,
+        name: name.trim() || `चैनल ${channelCount + 1} - लाइव`,
         streamKey: streamKey.trim(),
         resolution,
         bitrate,
       });
       onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'चैनल जोड़ने में त्रुटि हुई');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
       <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
+        <div className="px-6 py-4 bg-slate-850 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center border border-red-500/30">
+            <div className="w-10 h-10 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center border border-red-500/30">
               <Tv className="w-5 h-5" />
             </div>
             <div>
@@ -60,14 +73,14 @@ export const AddChannelModal: React.FC<AddChannelModalProps> = ({
               </h3>
               <p className="text-xs text-slate-400">
                 {lang === 'hi'
-                  ? 'एक और चैनल के लिए 24/7 लाइव स्ट्रीम कॉन्फ़िगर करें'
-                  : 'Configure 24/7 stream for another channel'}
+                  ? 'चैनल का नाम और स्ट्रीम सेटिंग्स कॉन्फ़िगर करें'
+                  : 'Configure channel name and stream settings'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700 transition"
+            className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -75,6 +88,13 @@ export const AddChannelModal: React.FC<AddChannelModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {errorMsg && (
+            <div className="p-3 bg-red-950/60 border border-red-700 text-xs text-red-200 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
               {lang === 'hi' ? 'चैनल का नाम (Channel Name)' : 'Channel Name'}
@@ -85,26 +105,26 @@ export const AddChannelModal: React.FC<AddChannelModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Channel 6 - Gaming 24/7"
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500 font-medium"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <Key className="w-3.5 h-3.5 text-amber-400" />
-              {lang === 'hi' ? 'YouTube Stream Key' : 'YouTube Stream Key'}
+              <span>{lang === 'hi' ? 'YouTube Stream Key' : 'YouTube Stream Key'}</span>
             </label>
             <input
               type="password"
               value={streamKey}
               onChange={(e) => setStreamKey(e.target.value)}
-              placeholder="xxxx-xxxx-xxxx-xxxx-xxxx"
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500 font-mono"
+              placeholder="xxxx-xxxx-xxxx-xxxx-xxxx (बाद में भी डाल सकते हैं)"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 font-mono"
             />
             <p className="text-[11px] text-slate-400 mt-1">
               {lang === 'hi'
                 ? '(वैकल्पिक: बाद में भी चैनल कार्ड में पेस्ट कर सकते हैं)'
-                : '(Optional: You can also paste this later in the channel card)'}
+                : '(Optional: You can paste this anytime in the channel card)'}
             </p>
           </div>
 
@@ -134,9 +154,9 @@ export const AddChannelModal: React.FC<AddChannelModalProps> = ({
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
               >
                 <option value="2000k">2000 kbps (कम डेटा)</option>
-                <option value="2500k">2500 kbps (YouTube 720p Standard)</option>
-                <option value="3500k">3500 kbps (YouTube 1080p)</option>
-                <option value="4500k">4500 kbps (High Quality)</option>
+                <option value="2500k">2500 kbps (YouTube Standard)</option>
+                <option value="3500k">3500 kbps (High Quality)</option>
+                <option value="4500k">4500 kbps (Ultra)</option>
               </select>
             </div>
           </div>
@@ -145,33 +165,36 @@ export const AddChannelModal: React.FC<AddChannelModalProps> = ({
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>
               {lang === 'hi'
-                ? '24/7 लूपिंग और ऑटो-रिकनेक्ट अपने आप एक्टिव रहेगा।'
+                ? '24/7 लूपिंग और ऑटो-रिकनेक्ट अपने आप चालू रहेगा।'
                 : '24/7 Continuous looping & auto-reconnect are enabled by default.'}
             </span>
           </div>
 
           {/* Buttons */}
-          <div className="pt-2 flex items-center justify-end gap-2">
+          <div className="pt-2 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium transition"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
             >
               {lang === 'hi' ? 'रद्द करें' : 'Cancel'}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-red-600/20"
+              className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-red-600/30"
             >
-              <Plus className="w-4 h-4" />
-              {loading
-                ? lang === 'hi'
-                  ? 'जोड़ा जा रहा है...'
-                  : 'Adding...'
-                : lang === 'hi'
-                ? 'चैनल जोड़ें'
-                : 'Add Channel'}
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{lang === 'hi' ? 'जोड़ा जा रहा है...' : 'Adding...'}</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'hi' ? 'चैनल जोड़ें' : 'Add Channel'}</span>
+                </>
+              )}
             </button>
           </div>
         </form>

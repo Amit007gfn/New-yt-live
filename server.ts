@@ -587,6 +587,221 @@ app.get('/api/videos', (_req: Request, res: Response) => {
   }
 });
 
+// Google Drive & Remote URL Import System
+export interface DriveJob {
+  id: string;
+  channelId?: string;
+  url: string;
+  status: 'starting' | 'downloading' | 'completed' | 'error';
+  progress: number;
+  downloadedMB: string;
+  totalMB: string;
+  videoPath?: string;
+  videoTitle?: string;
+  error?: string;
+}
+
+const driveJobs = new Map<string, DriveJob>();
+
+function extractGoogleDriveFileId(url: string): string | null {
+  const clean = url.trim();
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{20,})/,
+    /[?&]id=([a-zA-Z0-9_-]{20,})/,
+    /\/d\/([a-zA-Z0-9_-]{20,})/,
+    /^([a-zA-Z0-9_-]{25,})$/,
+  ];
+  for (const pattern of patterns) {
+    const match = clean.match(pattern);
+    if (match && match[1]) return match[1];
+  }
+  return null;
+}
+
+// Start Google Drive or direct URL download
+app.post('/api/drive-download', async (req: Request, res: Response) => {
+  const { url, channelId, videoTitle } = req.body;
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return res.status(400).json({ error: 'कृपया एक वैध Google Drive लिंक दर्ज करें (No URL provided)' });
+  }
+
+  const cleanUrl = url.trim();
+  const fileId = extractGoogleDriveFileId(cleanUrl);
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  let downloadUrl = cleanUrl;
+  let filename = `drive_video_${Date.now()}.mp4`;
+
+  if (fileId) {
+    downloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+    filename = `gdrive_${fileId}.mp4`;
+  } else if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    return res.status(400).json({ error: 'अमान्य लिंक। कृपया Google Drive का पूरा शेयर लिंक डालें।' });
+  }
+
+  const targetPath = path.join(UPLOADS_DIR, filename);
+  const relativePath = `uploads/${filename}`;
+
+  const job: DriveJob = {
+    id: jobId,
+    channelId,
+    url: cleanUrl,
+    status: 'starting',
+    progress: 0,
+    downloadedMB: '0.0',
+    totalMB: 'अज्ञात',
+    videoTitle: videoTitle || (fileId ? `Google Drive Video (${fileId.slice(0, 6)}...)` : filename),
+    videoPath: relativePath,
+  };
+
+  driveJobs.set(jobId, job);
+
+  // If already exists and valid video, skip downloading!
+  if (fs.existsSync(targetPath)) {
+    const stats = fs.statSync(targetPath);
+    if (stats.size > 1024 * 50) {
+      // Validate not HTML
+      const buf = Buffer.alloc(512);
+      const fd = fs.openSync(targetPath, 'r');
+      fs.readSync(fd, buf, 0, 512, 0);
+      fs.closeSync(fd);
+      const headerStr = buf.toString('utf-8').toLowerCase();
+      if (!headerStr.includes('<html') && !headerStr.includes('<!doctype html')) {
+        job.status = 'completed';
+        job.progress = 100;
+        job.downloadedMB = (stats.size / (1024 * 1024)).toFixed(1);
+        job.totalMB = job.downloadedMB;
+
+        if (channelId) {
+          const ch = channels.find((c) => c.id === channelId);
+          if (ch) {
+            ch.videoPath = relativePath;
+            ch.videoTitle = job.videoTitle || filename;
+            saveChannels();
+          }
+        }
+        return res.json({ success: true, jobId, cached: true });
+      }
+    }
+  }
+
+  // Start background curl download
+  res.json({ success: true, jobId });
+
+  job.status = 'downloading';
+  const cookieFile = `/tmp/gdrive_cookie_${jobId}.txt`;
+  const curlArgs = [
+    '-s',
+    '-L',
+    '-c',
+    cookieFile,
+    '-b',
+    cookieFile,
+    '-A',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    downloadUrl,
+    '-o',
+    targetPath,
+  ];
+
+  const curlProc = spawn('curl', curlArgs);
+
+  // Monitor progress
+  const progressTimer = setInterval(() => {
+    try {
+      if (fs.existsSync(targetPath)) {
+        const stats = fs.statSync(targetPath);
+        const downloadedBytes = stats.size;
+        const mb = (downloadedBytes / (1024 * 1024)).toFixed(1);
+        job.downloadedMB = mb;
+
+        // Estimate progress or display downloaded MB
+        if (job.progress < 90) {
+          job.progress = Math.min(90, Math.floor(job.progress + 5));
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, 1000);
+
+  curlProc.on('close', (code) => {
+    clearInterval(progressTimer);
+    try {
+      if (fs.existsSync(cookieFile)) {
+        fs.unlinkSync(cookieFile);
+      }
+    } catch (e) {}
+
+    if (code !== 0 || !fs.existsSync(targetPath)) {
+      job.status = 'error';
+      job.error = 'डाउनलोड विफल रहा। कृपया लिंक जांचें या दोबारा प्रयास करें।';
+      return;
+    }
+
+    const stats = fs.statSync(targetPath);
+    if (stats.size < 500) {
+      job.status = 'error';
+      job.error = 'डाउनलोड की गई फ़ाइल बहुत छोटी या खाली है।';
+      return;
+    }
+
+    // Check if the file is an HTML error page from Google Drive (e.g. Permission Denied)
+    try {
+      const buf = Buffer.alloc(1024);
+      const fd = fs.openSync(targetPath, 'r');
+      fs.readSync(fd, buf, 0, 1024, 0);
+      fs.closeSync(fd);
+      const headerStr = buf.toString('utf-8').toLowerCase();
+
+      if (headerStr.includes('<html') || headerStr.includes('<!doctype html')) {
+        try {
+          fs.unlinkSync(targetPath);
+        } catch (e) {}
+        job.status = 'error';
+        job.error =
+          'Google Drive फ़ाइल प्राइवेट है या लिंक अमान्य है। कृपया Google Drive में जाकर Share सेटिंग को "Anyone with the link can view" (कोई भी देख सकता है) पर सेट करें।';
+        return;
+      }
+    } catch (e) {
+      // ignore check error
+    }
+
+    // Success!
+    job.status = 'completed';
+    job.progress = 100;
+    job.downloadedMB = (stats.size / (1024 * 1024)).toFixed(1);
+    job.totalMB = job.downloadedMB;
+
+    // Auto-update channel if channelId was provided
+    if (channelId) {
+      const ch = channels.find((c) => c.id === channelId);
+      if (ch) {
+        ch.videoPath = relativePath;
+        ch.videoTitle = job.videoTitle || filename;
+        saveChannels();
+        appendLog(channelId, `Google Drive video downloaded successfully (${job.downloadedMB} MB)`);
+      }
+    }
+  });
+
+  curlProc.on('error', (err) => {
+    clearInterval(progressTimer);
+    job.status = 'error';
+    job.error = `डाउनलोड त्रुटि: ${err.message}`;
+  });
+});
+
+// Check status of a Google Drive download job
+app.get('/api/drive-download/status/:jobId', (req: Request, res: Response) => {
+  const { jobId } = req.params;
+  const job = driveJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  res.json({ job });
+});
+
 // System info & FFmpeg status
 app.get('/api/system', (_req: Request, res: Response) => {
   res.json({

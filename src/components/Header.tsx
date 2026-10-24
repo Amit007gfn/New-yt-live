@@ -6,8 +6,7 @@ import {
   Plus,
   HelpCircle,
   Globe,
-  Activity,
-  Server,
+  Upload,
   Tv,
 } from 'lucide-react';
 import { SystemInfo } from '../types';
@@ -20,6 +19,8 @@ interface HeaderProps {
   onStopAll: () => Promise<void>;
   onOpenAddModal: () => void;
   onOpenGuideModal: () => void;
+  onOpenUploadModal: () => void;
+  onOpenDriveModal: () => void;
   lang: 'hi' | 'en';
   setLang: (lang: 'hi' | 'en') => void;
 }
@@ -32,6 +33,8 @@ export const Header: React.FC<HeaderProps> = ({
   onStopAll,
   onOpenAddModal,
   onOpenGuideModal,
+  onOpenUploadModal,
+  onOpenDriveModal,
   lang,
   setLang,
 }) => {
@@ -84,6 +87,26 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
             </div>
+
+            {/* Google Drive Link Button */}
+            <button
+              onClick={onOpenDriveModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm shadow-blue-600/20"
+              title="Stream from Google Drive Link"
+            >
+              <span className="text-sm">☁️</span>
+              <span>{lang === 'hi' ? 'Drive लिंक' : 'Drive Link'}</span>
+            </button>
+
+            {/* Direct Upload Video Button in Header */}
+            <button
+              onClick={onOpenUploadModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm shadow-emerald-600/20"
+              title="Upload new video file"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>{lang === 'hi' ? 'वीडियो अपलोड' : 'Upload Video'}</span>
+            </button>
 
             {/* Guide Button */}
             <button

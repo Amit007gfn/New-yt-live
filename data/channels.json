@@ -1,0 +1,122 @@
+[
+  {
+    "id": "ch-1",
+    "name": "चैनल 1 - मुख्य लाइव (Main Channel)",
+    "rtmpServer": "rtmp://a.rtmp.youtube.com/live2",
+    "streamKey": "",
+    "videoPath": "uploads/sample_test_stream.mp4",
+    "videoTitle": "Test Live Broadcast (720p)",
+    "loop": true,
+    "resolution": "720p",
+    "bitrate": "2500k",
+    "audioBitrate": "128k",
+    "fps": 30,
+    "autoRestart": true,
+    "isLive": false,
+    "status": "idle",
+    "startedAt": null,
+    "stats": {
+      "fps": 0,
+      "bitrate": "0kbits/s",
+      "speed": "0x",
+      "time": "00:00:00",
+      "frame": 0
+    }
+  },
+  {
+    "id": "ch-2",
+    "name": "चैनल 2 - लो-फाई / म्यूजिक (Lofi Beats)",
+    "rtmpServer": "rtmp://a.rtmp.youtube.com/live2",
+    "streamKey": "",
+    "videoPath": "uploads/lofi_ambient_loop.mp4",
+    "videoTitle": "Lofi Ambient Color Loop",
+    "loop": true,
+    "resolution": "720p",
+    "bitrate": "2500k",
+    "audioBitrate": "128k",
+    "fps": 30,
+    "autoRestart": true,
+    "isLive": false,
+    "status": "idle",
+    "startedAt": null,
+    "stats": {
+      "fps": 0,
+      "bitrate": "0kbits/s",
+      "speed": "0x",
+      "time": "00:00:00",
+      "frame": 0
+    }
+  },
+  {
+    "id": "ch-3",
+    "name": "चैनल 3 - गेमिंग 24/7 (Gaming Live)",
+    "rtmpServer": "rtmp://a.rtmp.youtube.com/live2",
+    "streamKey": "",
+    "videoPath": "uploads/sample_test_stream.mp4",
+    "videoTitle": "Test Live Stream Video",
+    "loop": true,
+    "resolution": "720p",
+    "bitrate": "3000k",
+    "audioBitrate": "128k",
+    "fps": 30,
+    "autoRestart": true,
+    "isLive": false,
+    "status": "idle",
+    "startedAt": null,
+    "stats": {
+      "fps": 0,
+      "bitrate": "0kbits/s",
+      "speed": "0x",
+      "time": "00:00:00",
+      "frame": 0
+    }
+  },
+  {
+    "id": "ch-4",
+    "name": "चैनल 4 - भक्ति / भजन / पॉडकास्ट (Devotional)",
+    "rtmpServer": "rtmp://a.rtmp.youtube.com/live2",
+    "streamKey": "",
+    "videoPath": "uploads/lofi_ambient_loop.mp4",
+    "videoTitle": "Lofi Ambient Color Loop",
+    "loop": true,
+    "resolution": "720p",
+    "bitrate": "2500k",
+    "audioBitrate": "128k",
+    "fps": 30,
+    "autoRestart": true,
+    "isLive": false,
+    "status": "idle",
+    "startedAt": null,
+    "stats": {
+      "fps": 0,
+      "bitrate": "0kbits/s",
+      "speed": "0x",
+      "time": "00:00:00",
+      "frame": 0
+    }
+  },
+  {
+    "id": "ch-5",
+    "name": "चैनल 5 - समाचार / अपडेट्स (News & Alerts)",
+    "rtmpServer": "rtmp://a.rtmp.youtube.com/live2",
+    "streamKey": "",
+    "videoPath": "uploads/sample_test_stream.mp4",
+    "videoTitle": "Test Live Stream Video",
+    "loop": true,
+    "resolution": "720p",
+    "bitrate": "2500k",
+    "audioBitrate": "128k",
+    "fps": 30,
+    "autoRestart": true,
+    "isLive": false,
+    "status": "idle",
+    "startedAt": null,
+    "stats": {
+      "fps": 0,
+      "bitrate": "0kbits/s",
+      "speed": "0x",
+      "time": "00:00:00",
+      "frame": 0
+    }
+  }
+]

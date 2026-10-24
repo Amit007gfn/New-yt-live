@@ -3,6 +3,7 @@ import { Channel, SystemInfo } from './types';
 import { Header } from './components/Header';
 import { ChannelCard } from './components/ChannelCard';
 import { VideoUploadModal } from './components/VideoUploadModal';
+import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { LogsModal } from './components/LogsModal';
 import { GuideModal } from './components/GuideModal';
 import { AddChannelModal } from './components/AddChannelModal';
@@ -12,10 +13,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
-  Sparkles,
   ExternalLink,
   ShieldCheck,
   Zap,
+  Upload,
+  Cloud,
 } from 'lucide-react';
 
 export default function App() {
@@ -28,6 +30,9 @@ export default function App() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [activeChannelId, setActiveChannelId] = useState<string>('');
   const [activeVideoPath, setActiveVideoPath] = useState<string>('');
+
+  const [driveModalOpen, setDriveModalOpen] = useState(false);
+  const [driveTargetChannelId, setDriveTargetChannelId] = useState<string>('');
 
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   const [logChannelId, setLogChannelId] = useState<string | null>(null);
@@ -167,22 +172,45 @@ export default function App() {
     }
   };
 
-  // Add new Channel
-  const handleAddChannel = async (channelData: {
-    name: string;
-    streamKey: string;
-    resolution: '1080p' | '720p' | 'original';
-    bitrate: string;
+  // Add new Channel (Optimistic & robust)
+  const handleAddChannel = async (channelData?: {
+    name?: string;
+    streamKey?: string;
+    resolution?: '1080p' | '720p' | 'original';
+    bitrate?: string;
   }) => {
     try {
+      const nextNum = channels.length + 1;
+      const payload = {
+        name: channelData?.name?.trim() || `चैनल ${nextNum} - लाइव (Channel ${nextNum})`,
+        streamKey: channelData?.streamKey?.trim() || '',
+        resolution: channelData?.resolution || '720p',
+        bitrate: channelData?.bitrate || '2500k',
+        videoPath: 'uploads/sample_test_stream.mp4',
+        videoTitle: 'Test Live Stream Video',
+        loop: true,
+      };
+
       const res = await fetch('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(channelData),
+        body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        showToast(lang === 'hi' ? 'नया चैनल सफलतापूर्वक जोड़ा गया!' : 'Channel added successfully!', 'success');
+
+      const data = await res.json();
+      if (res.ok && data.success && data.channel) {
+        // Immediate optimistic UI update!
+        setChannels((prev) => [...prev, data.channel]);
+        showToast(
+          lang === 'hi'
+            ? `नया चैनल ${data.channel.name} सफलतापूर्वक जुड़ गया!`
+            : 'Channel added successfully!',
+          'success'
+        );
+        // Refresh from server to sync
         fetchChannels();
+      } else {
+        showToast(data.error || 'चैनल जोड़ने में विफल रहा', 'error');
       }
     } catch (e: any) {
       showToast(e.message || 'Failed to add channel', 'error');
@@ -209,6 +237,17 @@ export default function App() {
       lang === 'hi' ? `वीडियो सेट हो गई: ${videoTitle}` : `Video set: ${videoTitle}`,
       'success'
     );
+  };
+
+  const openGlobalUpload = () => {
+    setActiveChannelId(channels[0]?.id || '');
+    setActiveVideoPath('');
+    setVideoModalOpen(true);
+  };
+
+  const openGlobalDrive = (channelId?: string) => {
+    setDriveTargetChannelId(channelId || channels[0]?.id || '');
+    setDriveModalOpen(true);
   };
 
   const liveChannelsCount = channels.filter((c) => c.isLive).length;
@@ -248,6 +287,8 @@ export default function App() {
         onStopAll={handleStopAll}
         onOpenAddModal={() => setAddChannelModalOpen(true)}
         onOpenGuideModal={() => setGuideModalOpen(true)}
+        onOpenUploadModal={openGlobalUpload}
+        onOpenDriveModal={() => openGlobalDrive()}
         lang={lang}
         setLang={setLang}
       />
@@ -263,27 +304,27 @@ export default function App() {
               </span>
               <span className="text-xs text-slate-400">
                 {lang === 'hi'
-                  ? '5 YouTube चैनल • हर चैनल पर एक-एक अलग वीडियो'
-                  : '5 YouTube Channels • Dedicated video stream per channel'}
+                  ? '5 YouTube चैनल • Google Drive लिंक या वीडियो अपलोड से 24/7 लाइव'
+                  : '5 YouTube Channels • Stream from Google Drive Link or File Upload'}
               </span>
             </div>
             <h2 className="text-base sm:text-lg font-bold text-white">
               {lang === 'hi'
-                ? 'कैसे काम करता है: बस Stream Key डालें और Go Live दबाएं!'
-                : 'How it works: Just paste Stream Key and click Go Live!'}
+                ? 'Google Drive लिंक या अपलोड की गई वीडियो से सीधे 24/7 लाइव करें!'
+                : 'Stream 24/7 directly using Google Drive links or video uploads!'}
             </h2>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-400 pt-1">
               <span className="flex items-center gap-1.5 text-slate-300">
                 <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-[10px]">
                   1
                 </span>
-                {lang === 'hi' ? 'चैनल में Stream Key डालें' : 'Enter Stream Key'}
+                {lang === 'hi' ? 'Stream Key डालें' : 'Enter Stream Key'}
               </span>
               <span className="flex items-center gap-1.5 text-slate-300">
-                <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-[10px]">
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
                   2
                 </span>
-                {lang === 'hi' ? 'रिकॉर्डेड वीडियो चुनें या अपलोड करें' : 'Pick or upload video'}
+                {lang === 'hi' ? 'Google Drive लिंक डालें या वीडियो चुनें' : 'Paste Drive link or upload'}
               </span>
               <span className="flex items-center gap-1.5 text-slate-300">
                 <span className="w-5 h-5 rounded-full bg-red-600 text-white font-bold flex items-center justify-center text-[10px]">
@@ -294,12 +335,30 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Google Drive Button right in Banner */}
+            <button
+              onClick={() => openGlobalDrive()}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-900/30 flex items-center gap-2 transition"
+            >
+              <Cloud className="w-4 h-4" />
+              <span>{lang === 'hi' ? '☁️ Google Drive लिंक' : '☁️ Google Drive Link'}</span>
+            </button>
+
+            {/* Direct Upload Video Button in Banner */}
+            <button
+              onClick={openGlobalUpload}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>{lang === 'hi' ? '📤 अपलोड' : 'Upload'}</span>
+            </button>
+
             <button
               onClick={() => setGuideModalOpen(true)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/30 flex items-center gap-2 transition"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/30 flex items-center gap-2 transition"
             >
-              <span>{lang === 'hi' ? 'Stream Key कहाँ मिलेगी?' : 'Where is Stream Key?'}</span>
+              <span>{lang === 'hi' ? 'Stream Key गाइड' : 'Stream Key Guide'}</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -351,6 +410,7 @@ export default function App() {
                     setActiveVideoPath(cPath);
                     setVideoModalOpen(true);
                   }}
+                  onOpenDriveModal={(cId) => openGlobalDrive(cId)}
                   onOpenLogsModal={(cId, cName) => {
                     setLogChannelId(cId);
                     setLogChannelName(cName);
@@ -361,6 +421,29 @@ export default function App() {
                   lang={lang}
                 />
               ))}
+
+              {/* 1-Click Quick Add Channel Card */}
+              <div
+                onClick={() => handleAddChannel()}
+                role="button"
+                tabIndex={0}
+                className="rounded-2xl border-2 border-dashed border-slate-700/80 hover:border-red-500/80 bg-slate-900/30 hover:bg-slate-900/60 transition-all duration-200 flex flex-col items-center justify-center p-8 text-center cursor-pointer group min-h-[280px]"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-slate-800/80 group-hover:bg-red-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-md group-hover:shadow-red-600/30 group-hover:scale-105 border border-slate-700 group-hover:border-red-500 mb-3">
+                  <span className="text-2xl font-bold leading-none">+</span>
+                </div>
+                <h4 className="text-base font-bold text-slate-200 group-hover:text-white transition">
+                  {lang === 'hi' ? '+ नया YouTube चैनल जोड़ें' : '+ Add New YouTube Channel'}
+                </h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
+                  {lang === 'hi'
+                    ? `1-क्लिक में चैनल ${channels.length + 1} जोड़ें और लाइव करें`
+                    : `Click to add Channel ${channels.length + 1} instantly`}
+                </p>
+                <span className="mt-4 px-4 py-1.5 rounded-xl bg-slate-800 group-hover:bg-red-600 text-slate-300 group-hover:text-white text-xs font-semibold transition border border-slate-700 group-hover:border-red-500">
+                  {lang === 'hi' ? '➕ नया चैनल' : '➕ Add Channel'}
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -368,16 +451,16 @@ export default function App() {
         {/* Feature Highlights / 24/7 Reliability Details */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
           <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
-            <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center">
-              <Radio className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
+              <Cloud className="w-4 h-4" />
             </div>
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-              {lang === 'hi' ? '24/7 नॉन-स्टॉप लाइव लूप' : '24/7 Continuous Loop'}
+              {lang === 'hi' ? 'Google Drive लिंक सपोर्ट' : 'Google Drive Direct Support'}
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed">
               {lang === 'hi'
-                ? 'रिकॉर्डेड वीडियो खत्म होने पर तुरंत दोबारा बिना किसी लैग के फिर से शुरू हो जाती है।'
-                : 'Your recorded video loops seamlessly without buffer or interruptions.'}
+                ? 'भारी वीडियो को बार-बार अपलोड करने की जरूरत नहीं। बस Google Drive शेयर लिंक डालें और 24/7 लाइव शुरू करें।'
+                : 'No need to manually re-upload heavy video files. Simply paste Drive link.'}
             </p>
           </div>
 
@@ -386,7 +469,7 @@ export default function App() {
               <ShieldCheck className="w-4 h-4" />
             </div>
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-              {lang === 'hi' ? 'ऑटो-रिकनेक्ट सुरक्षा' : 'Auto-Reconnect Protection'}
+              {lang === 'hi' ? '24/7 ऑटो-रिकनेक्ट सुरक्षा' : 'Auto-Reconnect Protection'}
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed">
               {lang === 'hi'
@@ -396,8 +479,8 @@ export default function App() {
           </div>
 
           <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-              <Zap className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center">
+              <Radio className="w-4 h-4" />
             </div>
             <h4 className="text-xs font-bold text-white uppercase tracking-wider">
               {lang === 'hi' ? 'बिना किसी बाहरी सॉफ्टवेयर के' : 'Zero External Software'}
@@ -419,10 +502,23 @@ export default function App() {
       </footer>
 
       {/* Modals */}
+      <GoogleDriveModal
+        isOpen={driveModalOpen}
+        onClose={() => setDriveModalOpen(false)}
+        channels={channels}
+        targetChannelId={driveTargetChannelId}
+        onSuccess={(cId, vPath, vTitle) => {
+          handleSelectVideo(cId, vPath, vTitle);
+          fetchChannels();
+        }}
+        lang={lang}
+      />
+
       <VideoUploadModal
         isOpen={videoModalOpen}
         onClose={() => setVideoModalOpen(false)}
         channelId={activeChannelId}
+        channels={channels}
         currentVideoPath={activeVideoPath}
         onSelectVideo={handleSelectVideo}
         lang={lang}
