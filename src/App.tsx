@@ -18,12 +18,159 @@ import {
   Zap,
   Upload,
   Cloud,
+  Server,
+  AlertCircle,
 } from 'lucide-react';
 
+// Default 5 channels so the app NEVER displays 0 channels on cold start or Vercel
+const DEFAULT_CHANNELS: Channel[] = [
+  {
+    id: 'ch-1',
+    name: 'चैनल 1 - मुख्य लाइव (Main Channel)',
+    rtmpServer: 'rtmp://a.rtmp.youtube.com/live2',
+    streamKey: '',
+    videoPath: 'uploads/sample_test_stream.mp4',
+    videoTitle: 'Test Live Stream Video',
+    loop: true,
+    resolution: '720p',
+    bitrate: '2500k',
+    audioBitrate: '128k',
+    fps: 30,
+    autoRestart: true,
+    isLive: false,
+    status: 'idle',
+    startedAt: null,
+    stats: { fps: 0, bitrate: '0kbits/s', speed: '0x', time: '00:00:00', frame: 0 },
+  },
+  {
+    id: 'ch-2',
+    name: 'चैनल 2 - लो-फाई / म्यूजिक (Lofi Beats)',
+    rtmpServer: 'rtmp://a.rtmp.youtube.com/live2',
+    streamKey: '',
+    videoPath: 'uploads/lofi_ambient_loop.mp4',
+    videoTitle: 'Lofi Ambient Color Loop',
+    loop: true,
+    resolution: '720p',
+    bitrate: '2500k',
+    audioBitrate: '128k',
+    fps: 30,
+    autoRestart: true,
+    isLive: false,
+    status: 'idle',
+    startedAt: null,
+    stats: { fps: 0, bitrate: '0kbits/s', speed: '0x', time: '00:00:00', frame: 0 },
+  },
+  {
+    id: 'ch-3',
+    name: 'चैनल 3 - गेमिंग 24/7 (Gaming Live)',
+    rtmpServer: 'rtmp://a.rtmp.youtube.com/live2',
+    streamKey: '',
+    videoPath: 'uploads/sample_test_stream.mp4',
+    videoTitle: 'Test Live Stream Video',
+    loop: true,
+    resolution: '720p',
+    bitrate: '3000k',
+    audioBitrate: '128k',
+    fps: 30,
+    autoRestart: true,
+    isLive: false,
+    status: 'idle',
+    startedAt: null,
+    stats: { fps: 0, bitrate: '0kbits/s', speed: '0x', time: '00:00:00', frame: 0 },
+  },
+  {
+    id: 'ch-4',
+    name: 'चैनल 4 - भक्ति / भजन / पॉडकास्ट (Devotional)',
+    rtmpServer: 'rtmp://a.rtmp.youtube.com/live2',
+    streamKey: '',
+    videoPath: 'uploads/lofi_ambient_loop.mp4',
+    videoTitle: 'Lofi Ambient Color Loop',
+    loop: true,
+    resolution: '720p',
+    bitrate: '2500k',
+    audioBitrate: '128k',
+    fps: 30,
+    autoRestart: true,
+    isLive: false,
+    status: 'idle',
+    startedAt: null,
+    stats: { fps: 0, bitrate: '0kbits/s', speed: '0x', time: '00:00:00', frame: 0 },
+  },
+  {
+    id: 'ch-5',
+    name: 'चैनल 5 - समाचार / अपडेट्स (News & Alerts)',
+    rtmpServer: 'rtmp://a.rtmp.youtube.com/live2',
+    streamKey: '',
+    videoPath: 'uploads/sample_test_stream.mp4',
+    videoTitle: 'Test Live Stream Video',
+    loop: true,
+    resolution: '720p',
+    bitrate: '2500k',
+    audioBitrate: '128k',
+    fps: 30,
+    autoRestart: true,
+    isLive: false,
+    status: 'idle',
+    startedAt: null,
+    stats: { fps: 0, bitrate: '0kbits/s', speed: '0x', time: '00:00:00', frame: 0 },
+  },
+];
+
+// Safe JSON fetcher that NEVER crashes with "Unexpected token 'T', The page c... is not valid JSON"
+async function safeFetchJson<T>(
+  url: string,
+  options?: RequestInit
+): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+  try {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!contentType.includes('application/json')) {
+      // Server returned HTML or text (such as Vercel 404 "The page could not be found")
+      return {
+        ok: false,
+        status: res.status,
+        error:
+          res.status === 404
+            ? 'API endpoint not found (404)'
+            : `Server returned non-JSON response (${res.status})`,
+      };
+    }
+
+    const data = await res.json();
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: !res.ok ? data?.error || `HTTP ${res.status}` : undefined,
+    };
+  } catch (err: any) {
+    return { ok: false, status: 0, error: err.message || 'Network error' };
+  }
+}
+
 export default function App() {
-  const [channels, setChannels] = useState<Channel[]>([]);
+  // Initialize channels from localStorage or fallback to DEFAULT_CHANNELS
+  const [channels, setChannels] = useState<Channel[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('yt_streamer_channels');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      } catch (e) {
+        console.error('Error loading channels from localStorage', e);
+      }
+    }
+    return DEFAULT_CHANNELS;
+  });
+
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   const [lang, setLang] = useState<'hi' | 'en'>('hi');
 
   // Modals state
@@ -48,34 +195,47 @@ export default function App() {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
-    }, 4000);
+    }, 4500);
   };
 
-  // Fetch channels list and status
+  // Helper to persist channels in localStorage
+  const persistChannels = (newChannels: Channel[]) => {
+    try {
+      localStorage.setItem('yt_streamer_channels', JSON.stringify(newChannels));
+    } catch (e) {}
+  };
+
+  // Fetch channels list and status from backend
   const fetchChannels = useCallback(async () => {
     try {
-      const res = await fetch('/api/channels');
-      if (res.ok) {
-        const data = await res.json();
-        setChannels(data.channels || []);
+      const res = await safeFetchJson<{ channels: Channel[] }>('/api/channels');
+      if (res.ok && res.data?.channels && res.data.channels.length > 0) {
+        setChannels(res.data.channels);
+        persistChannels(res.data.channels);
+        setBackendAvailable(true);
+      } else {
+        // Backend not returning valid JSON (e.g. static hosting on Vercel)
+        if (res.status === 404 || !res.ok) {
+          setBackendAvailable(false);
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch channels:', err);
-    } finally {
-      setLoading(false);
+      setBackendAvailable(false);
     }
   }, []);
 
   // Fetch system info
   const fetchSystemInfo = useCallback(async () => {
     try {
-      const res = await fetch('/api/system');
-      if (res.ok) {
-        const data = await res.json();
-        setSystemInfo(data);
+      const res = await safeFetchJson<SystemInfo>('/api/system');
+      if (res.ok && res.data) {
+        setSystemInfo(res.data);
+        setBackendAvailable(true);
+      } else {
+        setBackendAvailable(false);
       }
     } catch (err) {
-      console.error('Failed to fetch system info:', err);
+      setBackendAvailable(false);
     }
   }, []);
 
@@ -83,38 +243,52 @@ export default function App() {
     fetchChannels();
     fetchSystemInfo();
 
-    // Poll channels status every 3 seconds for live streaming stats & health
+    // Poll channels status every 4 seconds if backend is available
     const interval = setInterval(() => {
       fetchChannels();
-    }, 3000);
+    }, 4000);
 
     return () => clearInterval(interval);
   }, [fetchChannels, fetchSystemInfo]);
 
   // Update channel config
   const handleUpdateChannel = async (id: string, updates: Partial<Channel>) => {
+    // 1. Immediately update UI state & localStorage
+    setChannels((prev) => {
+      const updated = prev.map((ch) => (ch.id === id ? { ...ch, ...updates } : ch));
+      persistChannels(updated);
+      return updated;
+    });
+
+    // 2. Sync to server if backend is alive
     try {
-      const res = await fetch(`/api/channels/${id}`, {
+      await safeFetchJson(`/api/channels/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
-      if (res.ok) {
-        setChannels((prev) => prev.map((ch) => (ch.id === id ? { ...ch, ...updates } : ch)));
-      } else {
-        showToast(lang === 'hi' ? 'अपडेट करने में विफल' : 'Failed to update channel', 'error');
-      }
-    } catch (e: any) {
-      showToast(e.message || 'Error updating channel', 'error');
+    } catch (e) {
+      // Ignored since local state is already saved
     }
   };
 
   // Start live stream
   const handleStartStream = async (id: string) => {
+    if (backendAvailable === false) {
+      showToast(
+        lang === 'hi'
+          ? 'सूचना: 24/7 लाइव स्ट्रीमिंग के लिए बैकएंड FFmpeg सर्वर चाहिए। Vercel पर केवल फ़्रंटएंड चलता है; लाइव करने के लिए AI Studio या VPS का उपयोग करें।'
+          : 'Notice: 24/7 Live streaming requires an active FFmpeg backend server.',
+        'error'
+      );
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/channels/${id}/start`, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
+      const res = await safeFetchJson<{ success: boolean; error?: string }>(`/api/channels/${id}/start`, {
+        method: 'POST',
+      });
+      if (res.ok && res.data?.success) {
         showToast(
           lang === 'hi'
             ? '🔴 24/7 लाइव स्ट्रीम शुरू हो गई है! YouTube Studio में चेक करें।'
@@ -123,7 +297,7 @@ export default function App() {
         );
         fetchChannels();
       } else {
-        showToast(data.error || 'स्ट्रीम शुरू करने में त्रुटि', 'error');
+        showToast(res.error || res.data?.error || 'स्ट्रीम शुरू करने में त्रुटि', 'error');
       }
     } catch (e: any) {
       showToast(e.message || 'Error starting stream', 'error');
@@ -132,30 +306,43 @@ export default function App() {
 
   // Stop live stream
   const handleStopStream = async (id: string) => {
+    // Immediate local state update
+    handleUpdateChannel(id, { isLive: false, status: 'idle' });
+
     try {
-      const res = await fetch(`/api/channels/${id}/stop`, { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
+      const res = await safeFetchJson<{ success: boolean }>(`/api/channels/${id}/stop`, { method: 'POST' });
+      if (res.ok) {
         showToast(lang === 'hi' ? 'लाइव स्ट्रीम रोक दी गई है।' : 'Live stream stopped.', 'info');
         fetchChannels();
       }
     } catch (e: any) {
-      showToast(e.message || 'Error stopping stream', 'error');
+      // ignore
     }
   };
 
   // Start All Streams
   const handleStartAll = async () => {
-    try {
-      const res = await fetch('/api/channels/start-all', { method: 'POST' });
-      const data = await res.json();
+    if (backendAvailable === false) {
       showToast(
         lang === 'hi'
-          ? 'सभी कॉन्फ़िगर किए गए चैनलों पर स्ट्रीम शुरू की जा रही है!'
-          : 'Starting streams for configured channels!',
-        'success'
+          ? 'सूचना: 24/7 लाइव स्ट्रीमिंग के लिए FFmpeg बैकएंड सर्वर सक्रिय होना चाहिए।'
+          : 'Live streaming requires active FFmpeg backend server.',
+        'error'
       );
-      fetchChannels();
+      return;
+    }
+
+    try {
+      const res = await safeFetchJson('/api/channels/start-all', { method: 'POST' });
+      if (res.ok) {
+        showToast(
+          lang === 'hi'
+            ? 'सभी कॉन्फ़िगर किए गए चैनलों पर स्ट्रीम शुरू की जा रही है!'
+            : 'Starting streams for configured channels!',
+          'success'
+        );
+        fetchChannels();
+      }
     } catch (e: any) {
       showToast(e.message || 'Failed to start all', 'error');
     }
@@ -163,70 +350,83 @@ export default function App() {
 
   // Stop All Streams
   const handleStopAll = async () => {
+    setChannels((prev) => {
+      const updated = prev.map((c) => ({ ...c, isLive: false, status: 'idle' as const }));
+      persistChannels(updated);
+      return updated;
+    });
+
     try {
-      const res = await fetch('/api/channels/stop-all', { method: 'POST' });
+      await safeFetchJson('/api/channels/stop-all', { method: 'POST' });
       showToast(lang === 'hi' ? 'सभी लाइव स्ट्रीम बंद कर दी गई हैं।' : 'All live streams stopped.', 'info');
       fetchChannels();
     } catch (e: any) {
-      showToast(e.message || 'Failed to stop all', 'error');
+      // ignore
     }
   };
 
-  // Add new Channel (Optimistic & robust)
+  // Add new Channel (Robust, Instant, Safe)
   const handleAddChannel = async (channelData?: {
     name?: string;
     streamKey?: string;
     resolution?: '1080p' | '720p' | 'original';
     bitrate?: string;
   }) => {
-    try {
-      const nextNum = channels.length + 1;
-      const payload = {
-        name: channelData?.name?.trim() || `चैनल ${nextNum} - लाइव (Channel ${nextNum})`,
-        streamKey: channelData?.streamKey?.trim() || '',
-        resolution: channelData?.resolution || '720p',
-        bitrate: channelData?.bitrate || '2500k',
-        videoPath: 'uploads/sample_test_stream.mp4',
-        videoTitle: 'Test Live Stream Video',
-        loop: true,
-      };
+    const nextNum = channels.length + 1;
+    const newChannel: Channel = {
+      id: `ch-${Date.now()}`,
+      name: channelData?.name?.trim() || `चैनल ${nextNum} - लाइव (Channel ${nextNum})`,
+      rtmpServer: 'rtmp://a.rtmp.youtube.com/live2',
+      streamKey: channelData?.streamKey?.trim() || '',
+      videoPath: 'uploads/sample_test_stream.mp4',
+      videoTitle: 'Test Live Stream Video',
+      loop: true,
+      resolution: channelData?.resolution || '720p',
+      bitrate: channelData?.bitrate || '2500k',
+      audioBitrate: '128k',
+      fps: 30,
+      autoRestart: true,
+      isLive: false,
+      status: 'idle',
+      startedAt: null,
+      stats: { fps: 0, bitrate: '0kbits/s', speed: '0x', time: '00:00:00', frame: 0 },
+    };
 
-      const res = await fetch('/api/channels', {
+    // 1. Instantly update UI and localStorage so it NEVER fails or delays!
+    const updated = [...channels, newChannel];
+    setChannels(updated);
+    persistChannels(updated);
+
+    showToast(
+      lang === 'hi'
+        ? `${newChannel.name} सफलतापूर्वक जुड़ गया!`
+        : `Channel added successfully!`,
+      'success'
+    );
+
+    // 2. Sync to server in background if available
+    try {
+      await safeFetchJson('/api/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(newChannel),
       });
-
-      const data = await res.json();
-      if (res.ok && data.success && data.channel) {
-        // Immediate optimistic UI update!
-        setChannels((prev) => [...prev, data.channel]);
-        showToast(
-          lang === 'hi'
-            ? `नया चैनल ${data.channel.name} सफलतापूर्वक जुड़ गया!`
-            : 'Channel added successfully!',
-          'success'
-        );
-        // Refresh from server to sync
-        fetchChannels();
-      } else {
-        showToast(data.error || 'चैनल जोड़ने में विफल रहा', 'error');
-      }
-    } catch (e: any) {
-      showToast(e.message || 'Failed to add channel', 'error');
+    } catch (e) {
+      // Ignored since already added locally
     }
   };
 
   // Delete Channel
   const handleDeleteChannel = async (id: string) => {
+    const updated = channels.filter((c) => c.id !== id);
+    setChannels(updated);
+    persistChannels(updated);
+    showToast(lang === 'hi' ? 'चैनल हटा दिया गया।' : 'Channel deleted.', 'info');
+
     try {
-      const res = await fetch(`/api/channels/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        showToast(lang === 'hi' ? 'चैनल हटा दिया गया।' : 'Channel deleted.', 'info');
-        fetchChannels();
-      }
-    } catch (e: any) {
-      showToast(e.message || 'Failed to delete channel', 'error');
+      await safeFetchJson(`/api/channels/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -256,7 +456,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-red-500 selection:text-white">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 animate-bounce max-w-md">
           <div
             className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border text-xs sm:text-sm font-medium ${
               toast.type === 'success'
@@ -295,6 +495,25 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Vercel or Serverless Deployment Notice (Only shown if backend server is not detected) */}
+        {backendAvailable === false && (
+          <div className="p-4 bg-amber-950/40 border border-amber-800/60 rounded-2xl flex items-start gap-3.5 text-xs text-amber-200 animate-fadeIn">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-amber-300">
+                {lang === 'hi'
+                  ? 'सर्वर कनेक्शन सूचना (Serverless / Static Environment):'
+                  : 'Serverless / Static Hosting Environment Detected:'}
+              </p>
+              <p className="text-slate-300 leading-relaxed">
+                {lang === 'hi'
+                  ? 'आप इस ऐप को Vercel या स्टैटिक होस्टिंग पर चला रहे हैं। आपके सभी चैनल, सेटिंग्स और Google Drive लिंक सुरक्षित रूप से सेव हैं। 24/7 बिना रुके लाइव स्ट्रीम चलाने के लिए FFmpeg बैकएंड सर्वर (Google AI Studio या VPS/Cloud Run) चालू होना आवश्यक है।'
+                  : 'Your channels, Stream Keys, and settings are saved locally. Continuous 24/7 live streaming requires the full-stack FFmpeg background process (hosted on Google AI Studio or Cloud Run/VPS).'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Simple Sada Dashboard Banner / Instructions */}
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 shadow-lg flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
@@ -365,88 +584,79 @@ export default function App() {
         </div>
 
         {/* Channels Grid */}
-        {loading ? (
-          <div className="py-20 text-center space-y-3">
-            <div className="w-10 h-10 border-3 border-red-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-slate-400 font-medium">
-              {lang === 'hi' ? 'चैनल लोड हो रहे हैं...' : 'Loading channels...'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Tv className="w-4 h-4 text-red-500" />
-                <span>
-                  {lang === 'hi'
-                    ? `आपके YouTube चैनल (${channels.length})`
-                    : `Your YouTube Channels (${channels.length})`}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Tv className="w-4 h-4 text-red-500" />
+              <span>
+                {lang === 'hi'
+                  ? `आपके YouTube चैनल (${channels.length})`
+                  : `Your YouTube Channels (${channels.length})`}
+              </span>
+            </h3>
+            <span className="text-xs text-slate-400">
+              {liveChannelsCount > 0 ? (
+                <span className="text-red-400 font-semibold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
+                  {liveChannelsCount} {lang === 'hi' ? 'चैनल लाइव चल रहे हैं' : 'channels currently LIVE'}
                 </span>
-              </h3>
-              <span className="text-xs text-slate-400">
-                {liveChannelsCount > 0 ? (
-                  <span className="text-red-400 font-semibold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block" />
-                    {liveChannelsCount} {lang === 'hi' ? 'चैनल लाइव चल रहे हैं' : 'channels currently LIVE'}
-                  </span>
-                ) : (
-                  lang === 'hi' ? 'सभी चैनल तैयार हैं' : 'All channels ready'
-                )}
+              ) : (
+                lang === 'hi' ? 'सभी चैनल तैयार हैं' : 'All channels ready'
+              )}
+            </span>
+          </div>
+
+          {/* Grid of channels */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {channels.map((channel, idx) => (
+              <ChannelCard
+                key={channel.id}
+                channel={channel}
+                index={idx}
+                onUpdateChannel={handleUpdateChannel}
+                onStartStream={handleStartStream}
+                onStopStream={handleStopStream}
+                onOpenVideoModal={(cId, cPath) => {
+                  setActiveChannelId(cId);
+                  setActiveVideoPath(cPath);
+                  setVideoModalOpen(true);
+                }}
+                onOpenDriveModal={(cId) => openGlobalDrive(cId)}
+                onOpenLogsModal={(cId, cName) => {
+                  setLogChannelId(cId);
+                  setLogChannelName(cName);
+                  setLogsModalOpen(true);
+                }}
+                onDeleteChannel={handleDeleteChannel}
+                isOnlyChannel={channels.length <= 1}
+                lang={lang}
+              />
+            ))}
+
+            {/* 1-Click Quick Add Channel Card */}
+            <div
+              onClick={() => handleAddChannel()}
+              role="button"
+              tabIndex={0}
+              className="rounded-2xl border-2 border-dashed border-slate-700/80 hover:border-red-500/80 bg-slate-900/30 hover:bg-slate-900/60 transition-all duration-200 flex flex-col items-center justify-center p-8 text-center cursor-pointer group min-h-[280px]"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-slate-800/80 group-hover:bg-red-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-md group-hover:shadow-red-600/30 group-hover:scale-105 border border-slate-700 group-hover:border-red-500 mb-3">
+                <span className="text-2xl font-bold leading-none">+</span>
+              </div>
+              <h4 className="text-base font-bold text-slate-200 group-hover:text-white transition">
+                {lang === 'hi' ? '+ नया YouTube चैनल जोड़ें' : '+ Add New YouTube Channel'}
+              </h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
+                {lang === 'hi'
+                  ? `1-क्लिक में चैनल ${channels.length + 1} जोड़ें और लाइव करें`
+                  : `Click to add Channel ${channels.length + 1} instantly`}
+              </p>
+              <span className="mt-4 px-4 py-1.5 rounded-xl bg-slate-800 group-hover:bg-red-600 text-slate-300 group-hover:text-white text-xs font-semibold transition border border-slate-700 group-hover:border-red-500">
+                {lang === 'hi' ? '➕ नया चैनल' : '➕ Add Channel'}
               </span>
             </div>
-
-            {/* Grid of channels */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {channels.map((channel, idx) => (
-                <ChannelCard
-                  key={channel.id}
-                  channel={channel}
-                  index={idx}
-                  onUpdateChannel={handleUpdateChannel}
-                  onStartStream={handleStartStream}
-                  onStopStream={handleStopStream}
-                  onOpenVideoModal={(cId, cPath) => {
-                    setActiveChannelId(cId);
-                    setActiveVideoPath(cPath);
-                    setVideoModalOpen(true);
-                  }}
-                  onOpenDriveModal={(cId) => openGlobalDrive(cId)}
-                  onOpenLogsModal={(cId, cName) => {
-                    setLogChannelId(cId);
-                    setLogChannelName(cName);
-                    setLogsModalOpen(true);
-                  }}
-                  onDeleteChannel={handleDeleteChannel}
-                  isOnlyChannel={channels.length <= 1}
-                  lang={lang}
-                />
-              ))}
-
-              {/* 1-Click Quick Add Channel Card */}
-              <div
-                onClick={() => handleAddChannel()}
-                role="button"
-                tabIndex={0}
-                className="rounded-2xl border-2 border-dashed border-slate-700/80 hover:border-red-500/80 bg-slate-900/30 hover:bg-slate-900/60 transition-all duration-200 flex flex-col items-center justify-center p-8 text-center cursor-pointer group min-h-[280px]"
-              >
-                <div className="w-14 h-14 rounded-2xl bg-slate-800/80 group-hover:bg-red-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-md group-hover:shadow-red-600/30 group-hover:scale-105 border border-slate-700 group-hover:border-red-500 mb-3">
-                  <span className="text-2xl font-bold leading-none">+</span>
-                </div>
-                <h4 className="text-base font-bold text-slate-200 group-hover:text-white transition">
-                  {lang === 'hi' ? '+ नया YouTube चैनल जोड़ें' : '+ Add New YouTube Channel'}
-                </h4>
-                <p className="text-xs text-slate-400 mt-1 max-w-[200px]">
-                  {lang === 'hi'
-                    ? `1-क्लिक में चैनल ${channels.length + 1} जोड़ें और लाइव करें`
-                    : `Click to add Channel ${channels.length + 1} instantly`}
-                </p>
-                <span className="mt-4 px-4 py-1.5 rounded-xl bg-slate-800 group-hover:bg-red-600 text-slate-300 group-hover:text-white text-xs font-semibold transition border border-slate-700 group-hover:border-red-500">
-                  {lang === 'hi' ? '➕ नया चैनल' : '➕ Add Channel'}
-                </span>
-              </div>
-            </div>
           </div>
-        )}
+        </div>
 
         {/* Feature Highlights / 24/7 Reliability Details */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
